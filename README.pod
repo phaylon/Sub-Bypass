@@ -1,0 +1,103 @@
+=pod
+
+=head1 NAME
+
+Sub::Bypass - Replaces sub calls with the sub arguments
+
+=head1 VERSION
+
+version 0.001
+
+=head1 SYNOPSIS
+
+    package MySetup;
+    use strictures 1;
+    use Sub::Bypass;
+
+    sub import {
+        install_bypassed_sub scalar(caller), 'foo';
+    }
+
+    1;
+    ...
+
+    package MyUsing;
+    use strictures 1;
+    use MySetup;
+
+    # foo() never gets called
+    # $count is 4
+    my @items = qw( a b c d );
+    my $count = foo(do { @items });
+
+    1;
+
+=head1 DESCRIPTION
+
+This module is B<EXPERIMENTAL>. If you're not sure what it's for, don't
+touch it.
+
+This module allows to install a subroutine that will be replaced with its
+arguments.  This means that (assuming C<foo> is the bypassed sub)
+
+    say foo(23);
+
+is basically the same as
+
+    say 23;
+
+=head1 EXPORTS
+
+=head2 install_bypassed_sub
+
+    install_bypassed_sub($target_package, $sub_name);
+
+Needs to be called during the compilation stage (typically inside of a
+C<import> method).
+
+=head1 CAVEATS
+
+=over
+
+=item *
+
+I have no idea about perl's internals.
+
+=item *
+
+It's written using L<B::Generate> containing lots of hacks that I'm not sure
+how or why they work or are necessary. It would probably be safer if it were
+rewritten in XS by someone who knows what they're doing.
+
+=item *
+
+It messes up L<B::Deparse> (I think).
+
+=item *
+
+It uses L<Check::UnitCheck> to perform OP tree manipulation at C<CHECK> or
+C<UNITCHECK> time. I have no idea if this makes sense in this context, or if
+it might mess up environments like mod_perl.
+
+=back
+
+=head1 SEE ALSO
+
+L<B>, L<B::Generate>, L<Check::UnitCheck>.
+
+=head1 BUGS
+
+Please report any bugs or feature requests to bug-sub-bypass@rt.cpan.org or through the web interface at:
+ http://rt.cpan.org/Public/Dist/Display.html?Name=Sub-Bypass
+
+=head1 AUTHOR
+
+Robert 'phaylon' Sedlacek <rs@474.at>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2011 by Robert 'phaylon' Sedlacek.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
