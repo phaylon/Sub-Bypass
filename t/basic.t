@@ -97,4 +97,27 @@ do {
     is $no_ret, 'outer-return', 'normal return';
 };
 
+do {
+    my @foo = qw( a b c );
+    is_deeply [let(do { let(do { let(do { @foo }) }) })],
+        [qw( a b c )], 'nested list context inline';
+    is scalar(
+        let(do {
+            my ($x);
+            let(do {
+                my ($y);
+                let(do {
+                    my ($z);
+                    @foo;
+                });
+            });
+        })),
+        3, 'nested scalar context inline';
+};
+
+do {
+    my @foo = qw( a b c );
+    is scalar(do { let(do { do { @foo } }) }), 3, 'mixed scopes';
+};
+
 done_testing;

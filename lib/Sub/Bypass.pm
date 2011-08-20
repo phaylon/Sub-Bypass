@@ -5,6 +5,7 @@ use strictures 1;
 package Sub::Bypass;
 
 use B;
+use B::Utils;
 use B::Generate                         1.37;
 use B::Flags                            0.04;
 use Check::UnitCheck                    0.13;
@@ -39,24 +40,29 @@ sub install_bypassed_sub {
             _dump(before => $op);
             my ($list) = $op->kids;
             my $next = $op->next;
+            my $ctx_src = _find_context_src($op, $name);
+            _debug(context => _id($ctx_src), $ctx_src->flagspv);
+#            _context_fix($list, $op);
             my $gv = _iterate($list->first, sub {
                 my $curr = shift;
+                return undef if $curr->isa('B::NULL');
                 if ($curr->name eq 'gv' and ${$curr->next} == $$op) {
                     return $curr;
                 }
                 return undef;
-            });
+            }) or die "Unable to find GV value";
             _recurse($list->first, sub {
                 my ($curr, $prev) = @_;
                 _debug(rec => _id($curr));
                 if (${$curr->next} == $$gv) {
                     _debug(target => _id($curr), before => _id($gv));
                     _debug(previous => _id($prev));
-                    _transfer_context($op, $curr);
+                    _transfer_context($ctx_src, $curr);
                     if ($prev->name =~ m/^pad.v$/) {
                         _debug(pad => _id($prev));
-                        _transfer_context($op, $prev);
+                        _transfer_context($ctx_src, $prev);
                     }
+
                     _connect($curr, $next);
                 }
                 return undef;
@@ -73,6 +79,73 @@ sub install_bypassed_sub {
             namespace::clean->clean_subroutines($package, $name);
         }
     });
+}
+
+sub _all_kids {
+    my ($op) = @_;
+    my @kids;
+    if ($op->isa('B::LISTOP')) {
+        @kids = $op->first;
+        push @kids, $kids[-1]->sibling while $kids[-1]->can('sibling');
+    }
+    else {
+        @kids = (
+            ( $op->can('first') ? $op->first : () ),
+            ( $op->can('last')  ? $op->last  : () ),
+            ( $op->can('other') ? $op->other : () )
+        );
+    }
+    return @kids;
+}
+
+sub _context_fix {
+    my ($orig_op, $src_op) = @_;
+    my $enter = $orig_op->first->next;
+    return unless $enter->name eq 'enter';
+    _debug(debug => _id($orig_op->first->next->parent));
+    my $op = ($orig_op->first->next->parent->kids)[-1];
+    while ($op and ($op->isa('B::LISTOP') or not $op->isa('B::BINOP'))) {
+        _debug(fixing => _id($op));
+        $op = ( $op->kids )[-1];
+        _debug(last_kid => ($op ? _id($op) : '-'));
+        last if not($op) or $op->isa('B::BINOP');
+        _transfer_context($src_op, $op) if $op;
+    }
+}
+
+sub _find_context_src {
+    my ($op, $name) = @_;
+    my ($list) = $op->kids;
+    my $pushmark = $list->first
+        or return $op;
+    return $op
+        unless $pushmark->name eq 'pushmark';
+    _debug(pushmark => _id($pushmark));
+    my $enter = $pushmark->next
+        or return $op;
+    return $op
+        unless $enter->name eq 'enter';
+    _debug(enter => _id($op));
+    my $leave = $enter->parent
+        or return $op;
+    if ($leave->name eq 'leave') {
+        _debug(leave => _id($leave), $leave->flagspv);
+        my $outer_leave;
+        my $last_enter;
+        while (my $after_leave = ($outer_leave || $leave)->next) {
+            _debug(checking => _id($after_leave));
+            last unless $after_leave
+                and not($after_leave->isa('B::NULL'))
+                and $after_leave->name eq 'gv'
+                and $after_leave->gv->NAME eq $name;
+            $last_enter = $after_leave->next;
+            _debug(last_enter => _id($last_enter));
+            $outer_leave = $after_leave->next->next;
+            _debug(leave_next => _id($outer_leave), $outer_leave->flagspv);
+        }
+        return $last_enter || $op;
+    }
+    return $op;
 }
 
 sub _dump  {
@@ -95,9 +168,11 @@ sub _connect {
 
 sub _id {
     my ($op) = @_;
-    return sprintf 'gv[%s]', $op->gv->NAME
+    return '<undef>' unless defined $op;
+    return '<B::NULL>' if $op->isa('B::NULL');
+    return sprintf '<gv[%s](%s)>', $op->gv->NAME, ref($op)
         if $op->name eq 'gv';
-    return $op->name;
+    return sprintf '<%s(%s)>', $op->name, ref($op);
 }
 
 sub _nullify {
