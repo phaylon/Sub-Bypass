@@ -5,7 +5,7 @@ use strictures 1;
 package Sub::Bypass;
 
 use B;
-use B::Utils;
+use B::Utils                            0.15;
 use B::Generate                         1.37;
 use B::Flags                            0.04;
 use Check::UnitCheck                    0.13;
