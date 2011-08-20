@@ -47,11 +47,11 @@ sub install_bypassed_sub {
                 return undef;
             });
             _recurse($list->first, sub {
-                my $curr = shift;
-                my $prev = shift;
+                my ($curr, $prev) = @_;
                 _debug(rec => _id($curr));
                 if (${$curr->next} == $$gv) {
                     _debug(target => _id($curr), before => _id($gv));
+                    _debug(previous => _id($prev));
                     _transfer_context($op, $curr);
                     if ($prev->name =~ m/^pad.v$/) {
                         _debug(pad => _id($prev));
@@ -142,11 +142,14 @@ sub _recurse {
         return unless $current->can('name');
         return if $$current == $$search;
         unless ($seen->{ $$current }++) {
-            $current->$run($search) and return 1;
+            $current->$run($search)
+                and return 1;
             if ($current->can('other') and $current->other) {
                 unless ($seen->{ ${$current->other} }++) {
-                    $current->other->$run($current) and return 1;
-                    _recurse($current->other, $run, $seen) and return 1;
+                    $current->other->$run($current)
+                        and return 1;
+                    _recurse($current->other, $run, $seen)
+                        and return 1;
                 }
             }
         }
